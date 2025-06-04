@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resale Flat Data Viewer</title>
+    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            background-color: #fff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #0056b3;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .filter-section {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 25px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #e9e9e9;
+        }
+        .filter-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+        }
+        .filter-group select,
+        .filter-group input[type="month"] {
+            width: calc(100% - 20px);
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #fff;
+            font-size: 1rem;
+        }
+        button {
+            padding: 12px 25px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            margin-top: 15px;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #searchButton {
+            display: block;
+            margin: 20px auto 0 auto;
+        }
+        #resultsSection {
+            margin-top: 30px;
+            border-top: 1px solid #eee;
+            padding-top: 20px;
+        }
+        #summary {
+            background-color: #f0f8ff;
+            padding: 15px;
+            border-left: 5px solid #007bff;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        #summary p {
+            margin: 5px 0;
+            font-size: 1.1em;
+        }
+        #dataTableContainer {
+            max-height: 500px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            background-color: #fff;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+            position: sticky;
+            top: 0;
+            z-index: 1;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .download-section {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-top: 25px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #e9e9e9;
+        }
+        .download-section label {
+            font-weight: bold;
+        }
+        .download-section select {
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #fff;
+            font-size: 1rem;
+        }
+        .loading-message {
+            text-align: center;
+            font-size: 1.2em;
+            color: #555;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Resale Flat Data Viewer</h1>
+
+        <div class="loading-message" id="loadingMessage">Loading data... Please wait.</div>
+
+        <div class="filter-section" id="filterSection" style="display: none;">
+            <div class="filter-group">
+                <label for="flatType">Flat Type:</label>
+                <select id="flatType" disabled>
+                    <option value="" disabled selected>Select Flat Type</option>
+                    <option value="3-Room">3-Room</option>
+                    <option value="4-Room">4-Room</option>
+                    <option value="5-Room">5-Room</option>
+                    <option value="Executive">Executive</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="town">Town:</label>
+                <select id="town" disabled>
+                    <option value="" disabled selected>Select Town</option>
+                    <option value="Hougang">Hougang</option>
+                    <option value="Punggol">Punggol</option>
+                    <option value="Sengkang">Sengkang</option>
+                </select>
+            </div>
+
+            <div class="filter-group">
+                <label for="startDate">Resale Registration Start Date:</label>
+                <input type="month" id="startDate" disabled placeholder="YYYY-MM">
+            </div>
+
+            <div class="filter-group">
+                <label for="endDate">Resale Registration End Date:</label>
+                <input type="month" id="endDate" disabled placeholder="YYYY-MM">
+            </div>
+        </div>
+
+        <button id="searchButton" disabled>Search</button>
+
+        <div id="resultsSection" style="display: none;">
+            <div id="summary"></div>
+            <div id="dataTableContainer">
+                <table id="dataTable">
+                    <thead>
+                        <tr>
+                            <th>Block</th>
+                            <th>Street Name</th>
+                            <th>Storey</th>
+                            <th>Floor Area</th>
+                            <th>Flat Model</th>
+                            <th>Remaining Lease (Years)</th>
+                            <th>Remaining Lease (Months)</th>
+                            <th>Resale Price</th>
+                            <th>Resale Registration Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        </tbody>
+                </table>
+            </div>
+
+            <div class="download-section">
+                <label for="downloadFormat">Download Format:</label>
+                <select id="downloadFormat">
+                    <option value="pdf">PDF</option>
+                    <option value="xlsx">Excel (XLSX)</option>
+                </select>
+                <button id="saveButton">Save</button>
+            </div>
+
+            <br></br>
+            <div class="acknowledgement">
+                <label for="dataSource">Data Source: HDB Check Resale Flat Prices website</label>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        let excelData = [];
+        let filteredData = [];
+        let minResaleDate = null;
+        let maxResaleDate = null;
+
+        // Function to convert YYYY-MM-DD to YYYY-MM
+        function formatDateToYYYYMM(dateString) {
+            if (!dateString) return '';
+            const date = new Date(dateString);
+            const year = date.getFullYear();
+            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+            return `${year}-${month}`;
+        }
+
+        // Function to convert YYYY-MM to Month YYYY for display
+        function formatMonthYearForDisplay(yyyymm) {
+            if (!yyyymm) return '';
+            const [year, month] = yyyymm.split('-');
+            const date = new Date(year, parseInt(month) - 1, 1);
+            return date.toLocaleString('en-US', { month: 'long', year: 'numeric' });
+        }
+
+        // Function to load the Excel file
+        async function loadExcelFile() {
+            try {
+                document.getElementById('loadingMessage').style.display = 'block';
+                const response = await fetch('resale_data.xlsx');
+                const arrayBuffer = await response.arrayBuffer();
+                const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                
+                // Convert sheet to JSON, keeping date formatting as is (string)
+                excelData = XLSX.utils.sheet_to_json(worksheet, { raw: false, defval: null });
+
+                // Process 'Resale Registration Date' for min/max and consistent YYYY-MM format
+                let dates = [];
+                excelData.forEach(row => {
+                    if (row['Resale Registration Date']) {
+                        // Ensure date is treated as a string 'YYYY-MM-DD' for parsing
+                        const dateString = row['Resale Registration Date'];
+                        const yyyymm = formatDateToYYYYMM(dateString);
+                        dates.push(yyyymm);
+                        row['Resale Registration Date Formatted'] = yyyymm; // Store YYYY-MM
+                    } else {
+                        row['Resale Registration Date Formatted'] = null;
+                    }
+                });
+
+                // Determine min and max dates for the month input fields
+                if (dates.length > 0) {
+                    dates.sort(); // Sorts YYYY-MM strings correctly
+                    minResaleDate = dates[0];
+                    maxResaleDate = dates[dates.length - 1];
+
+                    document.getElementById('startDate').min = minResaleDate;
+                    document.getElementById('startDate').max = maxResaleDate;
+                    document.getElementById('endDate').min = minResaleDate;
+                    document.getElementById('endDate').max = maxResaleDate;
+
+                    document.getElementById('startDate').placeholder = minResaleDate;
+                    document.getElementById('endDate').placeholder = maxResaleDate;
+                }
+
+                // Enable the filter controls
+                document.getElementById('flatType').disabled = false;
+                document.getElementById('town').disabled = false;
+                document.getElementById('startDate').disabled = false;
+                document.getElementById('endDate').disabled = false;
+                document.getElementById('searchButton').disabled = false;
+                document.getElementById('loadingMessage').style.display = 'none';
+                document.getElementById('filterSection').style.display = 'grid';
+
+                console.log("Excel data loaded:", excelData);
+
+            } catch (error) {
+                console.error("Error loading Excel file:", error);
+                document.getElementById('loadingMessage').innerText = 'Failed to load data. Please ensure "resale_data.xlsx" is in the same directory.';
+            }
+        }
+
+        // Function to check if all necessary fields are selected
+        function areAllFieldsSelected() {
+            const flatType = document.getElementById('flatType').value;
+            const town = document.getElementById('town').value;
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            return flatType !== "" && town !== "" && startDate !== "" && endDate !== "";
+        }
+
+        // Function to filter data and display results
+        function filterData() {
+            if (!areAllFieldsSelected()) {
+                alert("Please make selections in all filter fields (Flat Type, Town, Start Date, End Date) before searching.");
+                return;
+            }
+
+            const flatType = document.getElementById('flatType').value;
+            const town = document.getElementById('town').value;
+            const startDate = document.getElementById('startDate').value; // YYYY-MM
+            const endDate = document.getElementById('endDate').value;   // YYYY-MM
+
+            filteredData = excelData.filter(row => {
+                const rowDate = row['Resale Registration Date Formatted']; // YYYY-MM from loaded data
+                
+                // Compare YYYY-MM strings directly
+                return (
+                    row['Flat Type'] === flatType &&
+                    row['Town'] === town &&
+                    rowDate >= startDate &&
+                    rowDate <= endDate
+                );
+            });
+
+            // Display search summary
+            const summaryDiv = document.getElementById('summary');
+            summaryDiv.innerHTML = `
+                <p><strong>Search Summary:</strong></p>
+                <p><strong>Flat Type:</strong> ${flatType}</p>
+                <p><strong>Town:</strong> ${town}</p>
+                <p><strong>Resale Registration Date:</strong> ${formatMonthYearForDisplay(startDate)} to ${formatMonthYearForDisplay(endDate)}</p>
+                <p><strong>Total number of records found:</strong> ${filteredData.length}</p>
+            `;
+
+            // Display filtered data in the table
+            const dataTableBody = document.querySelector('#dataTable tbody');
+            dataTableBody.innerHTML = ''; // Clear previous results
+
+            if (filteredData.length === 0) {
+                dataTableBody.innerHTML = '<tr><td colspan="9" style="text-align: center;">No records found for the selected criteria.</td></tr>';
+            } else {
+                filteredData.forEach(row => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${row['Block'] || ''}</td>
+                        <td>${row['Street Name'] || ''}</td>
+                        <td>${row['Storey'] || ''}</td>
+                        <td>${row['Floor Area'] || ''}</td>
+                        <td>${row['Flat Model'] || ''}</td>
+                        <td>${row['Remaining Lease (Years)'] || ''}</td>
+                        <td>${row['Remaining Lease (Months)'] || ''}</td>
+                        <td>$${(row['Resale Price'] || 0).toLocaleString()}</td>
+                        <td>${formatMonthYearForDisplay(row['Resale Registration Date Formatted']) || ''}</td>
+                    `;
+                    dataTableBody.appendChild(tr);
+                });
+            }
+
+            document.getElementById('resultsSection').style.display = 'block';
+        }
+
+        // Function to save the report
+        async function saveReport() {
+            if (filteredData.length === 0) {
+                alert("No data to save. Please perform a search first.");
+                return;
+            }
+
+            const downloadFormat = document.getElementById('downloadFormat').value;
+            const flatType = document.getElementById('flatType').value;
+            const town = document.getElementById('town').value;
+            const startDate = document.getElementById('startDate').value;
+            const endDate = document.getElementById('endDate').value;
+
+            const summaryText = [
+                `Search Summary:`,
+                `Flat Type: ${flatType}`,
+                `Town: ${town}`,
+                `Resale Registration Date: ${formatMonthYearForDisplay(startDate)} to ${formatMonthYearForDisplay(endDate)}`,
+                `Total number of records found: ${filteredData.length}`
+            ];
+
+            const tableHeaders = [
+                'Block', 'Street Name', 'Storey', 'Floor Area', 'Flat Model',
+                'Remaining Lease (Years)', 'Remaining Lease (Months)', 'Resale Price', 'Resale Registration Date'
+            ];
+
+            const tableData = filteredData.map(row => [
+                row['Block'],
+                row['Street Name'],
+                row['Storey'],
+                row['Floor Area'],
+                row['Flat Model'],
+                row['Remaining Lease (Years)'],
+                row['Remaining Lease (Months)'],
+                row['Resale Price'],
+                formatMonthYearForDisplay(row['Resale Registration Date Formatted'])
+            ]);
+
+            if (downloadFormat === 'pdf') {
+                const { jsPDF } = window.jspdf;
+                const doc = new jsPDF();
+
+                // Add summary
+                let yPos = 20;
+                summaryText.forEach(line => {
+                    doc.text(line, 14, yPos);
+                    yPos += 7;
+                });
+
+                // Add table
+                doc.autoTable({
+                    startY: yPos + 10,
+                    head: [tableHeaders],
+                    body: tableData,
+                    styles: { fontSize: 8, cellPadding: 2 },
+                    headStyles: { fillColor: [200, 200, 200], textColor: [0, 0, 0] },
+                    margin: { top: 10 }
+                });
+
+                doc.save('filtered_data.pdf');
+            } else if (downloadFormat === 'xlsx') {
+                const ws_data = [
+                    summaryText,
+                    [], // Blank row
+                    tableHeaders,
+                    ...tableData
+                ];
+                const ws = XLSX.utils.aoa_to_sheet(ws_data);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Filtered Data");
+                XLSX.writeFile(wb, 'filtered_data.xlsx');
+            }
+        }
+
+        // Event Listeners
+        document.addEventListener('DOMContentLoaded', loadExcelFile);
+        document.getElementById('searchButton').addEventListener('click', filterData);
+        document.getElementById('saveButton').addEventListener('click', saveReport);
+
+        // Enable search button only when all fields are selected (optional, can be done in filterData too)
+        document.querySelectorAll('.filter-group select, .filter-group input').forEach(element => {
+            element.addEventListener('change', () => {
+                document.getElementById('searchButton').disabled = !areAllFieldsSelected();
+            });
+        });
+
+    </script>
+</body>
+</html>
